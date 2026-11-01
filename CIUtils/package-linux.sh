@@ -17,7 +17,12 @@ dotnet publish TuneLab/TuneLab.csproj -c "$CONFIG" -r "$ARCH" --self-contained
 dotnet publish TuneLab.Cli/TuneLab.Cli.csproj -c "$CONFIG" -r "$ARCH" --self-contained
 
 # Copy CLI binary into TuneLab publish dir
-cp "$CLI_PUBLISH_DIR/tunelab" "$PUBLISH_DIR/" 2>/dev/null || true
+if [ -f "$CLI_PUBLISH_DIR/TuneLab.Cli" ]; then
+    cp "$CLI_PUBLISH_DIR/TuneLab.Cli" "$PUBLISH_DIR/tunelab"
+    cp "$CLI_PUBLISH_DIR/TuneLab.Cli" "$PUBLISH_DIR/"
+elif [ -f "$CLI_PUBLISH_DIR/tunelab" ]; then
+    cp "$CLI_PUBLISH_DIR/tunelab" "$PUBLISH_DIR/tunelab"
+fi
 
 mkdir -p "$DIST_DIR"
 
@@ -43,7 +48,9 @@ Categories=AudioVideo;Audio;AudioVideoEditing;
 MimeType=application/x-tunelab-project;
 EOF
 
-chmod +x "$TAR_APP_DIR/TuneLab" "$TAR_APP_DIR/tunelab"
+[ -f "$TAR_APP_DIR/TuneLab" ] && chmod +x "$TAR_APP_DIR/TuneLab"
+[ -f "$TAR_APP_DIR/tunelab" ] && chmod +x "$TAR_APP_DIR/tunelab"
+[ -f "$TAR_APP_DIR/TuneLab.Cli" ] && chmod +x "$TAR_APP_DIR/TuneLab.Cli"
 tar -czf "$DIST_DIR/TuneLab-linux-x64-v${VERSION}.tar.gz" -C "$TAR_STAGE" TuneLab
 rm -rf "$TAR_STAGE"
 
@@ -147,6 +154,12 @@ exec /usr/lib/tunelab/TuneLab "\$@"
 EOS
 chmod 755 %{buildroot}/usr/bin/tunelab
 
+cat << 'EOS' > %{buildroot}/usr/bin/tunelab-cli
+#!/usr/bin/env sh
+exec /usr/lib/tunelab/tunelab "\$@"
+EOS
+chmod 755 %{buildroot}/usr/bin/tunelab-cli
+
 cat << 'EOS' > %{buildroot}/usr/share/applications/tunelab.desktop
 [Desktop Entry]
 Name=TuneLab
@@ -161,6 +174,7 @@ EOS
 %files
 /usr/lib/tunelab
 /usr/bin/tunelab
+/usr/bin/tunelab-cli
 /usr/share/applications/tunelab.desktop
 /usr/share/pixmaps/tunelab.png
 

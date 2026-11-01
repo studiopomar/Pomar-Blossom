@@ -41,7 +41,9 @@ build_arch() {
     echo "=== Building TuneLab for $target_arch ($CONFIG) ==="
     dotnet publish TuneLab/TuneLab.csproj -c "$CONFIG" -r "$target_arch" --self-contained
     dotnet publish TuneLab.Cli/TuneLab.Cli.csproj -c "$CONFIG" -r "$target_arch" --self-contained
-    cp "TuneLab.Cli/bin/$CONFIG/net8.0/$target_arch/publish/tunelab" "TuneLab/bin/$CONFIG/net8.0/$target_arch/publish/" 2>/dev/null || true
+    if [ -f "TuneLab.Cli/bin/$CONFIG/net8.0/$target_arch/publish/TuneLab.Cli" ]; then
+        cp "TuneLab.Cli/bin/$CONFIG/net8.0/$target_arch/publish/TuneLab.Cli" "TuneLab/bin/$CONFIG/net8.0/$target_arch/publish/tunelab"
+    fi
 }
 
 assemble_bundle() {
