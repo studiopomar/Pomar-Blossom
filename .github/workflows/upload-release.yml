@@ -115,69 +115,122 @@ jobs:
             asset_name: TuneLab-Setup-win-x64-v${{ steps.ver.outputs.version }}.exe
             asset_content_type: application/octet-stream
 
-    release:
-      name: Upload release
-      needs: [call-build, create-release]
-      runs-on: ${{matrix.os}}
-    
-      strategy:
-        fail-fast: false
-        matrix:
-          runtime: [ "win-x64", "osx-arm64", "linux-x64" ]
-          include:
-            - runtime: "win-x64"
-              os: "windows-latest"
-            - runtime: "osx-arm64"
-              os: "macos-latest"
-            - runtime: "linux-x64"
-              os: "ubuntu-latest"
-
+    release-windows:
+      name: Package & Upload Windows
+      needs: [create-release]
+      runs-on: windows-latest
       permissions:
         contents: write
-    
       steps:
-        - name: Get short SHA
-          uses: benjlevesque/short-sha@v3.0
-          id: short-sha
+        - name: Checkout
+          uses: actions/checkout@v4
           with:
-            length: 7
+            fetch-depth: 0
 
-        - name: Download artifact
-          uses: actions/download-artifact@v4
+        - name: Install .NET Core
+          uses: actions/setup-dotnet@v4
           with:
-            name: TuneLab-${{ matrix.runtime }}-${{ steps.short-sha.outputs.sha }}
-          
-        - name: Package - Windows
-          if: runner.os == 'Windows'
+            dotnet-version: 8.0.x
+
+        - name: Resolve version (strip leading v)
+          id: ver
           shell: pwsh
-          working-directory: ${{github.workspace}}
-          run: Compress-Archive -Path .\* -DestinationPath package.zip
-          
-        - name: Package - MacOS and Linux
-          if: runner.os != 'Windows'
+          run: |
+            $v = "${{ github.ref_name }}".TrimStart('v')
+            "version=$v" >> $env:GITHUB_OUTPUT
+
+        - name: Publish Windows binaries
+          shell: pwsh
+          run: |
+            dotnet publish TuneLab/TuneLab.csproj -c Release -r win-x64 --self-contained
+            dotnet publish TuneLab.Cli/TuneLab.Cli.csproj -c Release -r win-x64 --self-contained
+            Copy-Item "TuneLab.Cli/bin/Release/net8.0/win-x64/publish/*" -Destination "TuneLab/bin/Release/net8.0/win-x64/publish/" -Recurse -Force
+            Compress-Archive -Path "TuneLab/bin/Release/net8.0/win-x64/publish/*" -DestinationPath "TuneLab-win-x64-v${{ steps.ver.outputs.version }}.zip"
+
+        - name: Upload Windows zip
+          uses: softprops/action-gh-release@v2
+          with:
+            tag_name: ${{ github.ref_name }}
+            files: TuneLab-win-x64-v${{ steps.ver.outputs.version }}.zip
+
+    release-macos:
+      name: Package & Upload macOS Universal
+      needs: [create-release]
+      runs-on: macos-latest
+      permissions:
+        contents: write
+      steps:
+        - name: Checkout
+          uses: actions/checkout@v4
+          with:
+            fetch-depth: 0
+
+        - name: Install .NET Core
+          uses: actions/setup-dotnet@v4
+          with:
+            dotnet-version: 8.0.x
+
+        - name: Resolve version (strip leading v)
+          id: ver
           shell: bash
-          working-directory: ${{github.workspace}}
-          run: tar -zcvf package.tar.gz ./*
-    
-        - name: Upload - Windows
-          if: runner.os == 'Windows'
-          uses: actions/upload-release-asset@v1
-          env:
-            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          run: |
+            v="${GITHUB_REF_NAME#v}"
+            echo "version=$v" >> "$GITHUB_OUTPUT"
+
+        - name: Build and Package macOS Universal Bundle
+          shell: bash
+          run: |
+            chmod +x tools/package-macos.sh
+            ./tools/package-macos.sh universal Release ${{ steps.ver.outputs.version }}
+
+        - name: Upload macOS assets
+          uses: softprops/action-gh-release@v2
           with:
-            upload_url: ${{ needs.create-release.outputs.upload_url }}
-            asset_path: ./package.zip
-            asset_name: TuneLab-${{ matrix.runtime }}-${{ github.ref_name }}.zip
-            asset_content_type: application/zip
-    
-        # 因为还没有解决跨平台的问题所以这个先关掉掉，等跨平台完成了就可以去掉执行条件里的 false 一并发布 linux 和 osx 的版本了
-        - name: Upload - MacOS and Linux
-          if: runner.os != 'Windows' && false
-          uses: actions/upload-release-asset@v1
-          env:
-            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            tag_name: ${{ github.ref_name }}
+            files: |
+              artifacts/TuneLab-osx-universal-v${{ steps.ver.outputs.version }}.dmg
+              artifacts/TuneLab-osx-universal-v${{ steps.ver.outputs.version }}.zip
+
+    release-linux:
+      name: Package & Upload Linux (tar.gz, deb, rpm)
+      needs: [create-release]
+      runs-on: ubuntu-latest
+      permissions:
+        contents: write
+      steps:
+        - name: Checkout
+          uses: actions/checkout@v4
           with:
-            upload_url: ${{ needs.create-release.outputs.upload_url }}
-            asset_path: ./package.tar.gz
-            asset_name: TuneLab-${{ matrix.runtime }}-${{ github.ref_name }}.tar.gz
-            asset_content_type: application/gzip
+            fetch-depth: 0
+
+        - name: Install .NET Core
+          uses: actions/setup-dotnet@v4
+          with:
+            dotnet-version: 8.0.x
+
+        - name: Install packaging tools (rpm)
+          run: |
+            sudo apt-get update
+            sudo apt-get install -y rpm
+
+        - name: Resolve version (strip leading v)
+          id: ver
+          shell: bash
+          run: |
+            v="${GITHUB_REF_NAME#v}"
+            echo "version=$v" >> "$GITHUB_OUTPUT"
+
+        - name: Build and Package Linux artifacts
+          shell: bash
+          run: |
+            chmod +x CIUtils/package-linux.sh
+            ./CIUtils/package-linux.sh ${{ steps.ver.outputs.version }} Release
+
+        - name: Upload Linux assets
+          uses: softprops/action-gh-release@v2
+          with:
+            tag_name: ${{ github.ref_name }}
+            files: |
+              dist/TuneLab-linux-x64-v${{ steps.ver.outputs.version }}.tar.gz
+              dist/tunelab_${{ steps.ver.outputs.version }}_amd64.deb
+              dist/*.rpm

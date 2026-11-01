@@ -32,9 +32,15 @@ internal partial class AboutDialog : Window
 
         content.Background = Style.INTERFACE.ToBrush();
 
-        // Linux 用系统标题栏，藏掉自绘的。
-        if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Linux))
+        bool isMac = OperatingSystem.IsMacOS();
+        if (isMac)
+        {
+            ExtendClientAreaChromeHints = Avalonia.Platform.ExtendClientAreaChromeHints.PreferSystemChrome;
+        }
+        else if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Linux))
+        {
             titleBar.Height = 0;
+        }
 
         titleLabel.Content = "About TuneLab".Tr(TC.Dialog);
         versionText.Foreground = Style.HIGH_LIGHT.ToBrush();
@@ -42,12 +48,15 @@ internal partial class AboutDialog : Window
         tagline.Foreground = Style.LIGHT_WHITE.ToBrush();
         tagline.Text = "An extensible singing voice synthesis editor.".Tr(TC.Dialog);
 
-        // 标题栏关闭按钮
-        var close = new Button { Width = 46, Height = 40 };
-        close.AddContent(new() { Item = new BorderItem(), ColorSet = new() { Color = Style.TRANSPARENT, HoveredColor = Style.SYNTHESIS_FAILED } });
-        close.AddContent(new() { Item = new IconItem() { Icon = Assets.WindowClose }, ColorSet = new() { Color = Style.LIGHT_WHITE, HoveredColor = Colors.White } });
-        close.Clicked += Close;
-        closeSlot.Children.Add(close);
+        if (!isMac)
+        {
+            // 标题栏关闭按钮（非 macOS 平台）
+            var close = new Button { Width = 46, Height = 40 };
+            close.AddContent(new() { Item = new BorderItem(), ColorSet = new() { Color = Style.TRANSPARENT, HoveredColor = Style.SYNTHESIS_FAILED } });
+            close.AddContent(new() { Item = new IconItem() { Icon = Assets.WindowClose }, ColorSet = new() { Color = Style.LIGHT_WHITE, HoveredColor = Colors.White } });
+            close.Clicked += Close;
+            closeSlot.Children.Add(close);
+        }
 
         // 链接（点击只打开网页、不关闭窗口）
         AddLink(linksPanel, "Forum", AppInfo.ForumUrl);

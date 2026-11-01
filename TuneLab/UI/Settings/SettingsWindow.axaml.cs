@@ -1,7 +1,8 @@
-﻿using Avalonia;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -73,22 +74,41 @@ internal partial class SettingsWindow : Window
         var closeButton = new GUI.Components.Button() { Width = 48, Height = 40 }
                 .AddContent(new() { Item = new BorderItem() { CornerRadius = 0 }, ColorSet = new() { HoveredColor = Colors.White.Opacity(0.2), PressedColor = Colors.White.Opacity(0.2) } })
                 .AddContent(new() { Item = new IconItem() { Icon = Assets.WindowClose }, ColorSet = new() { Color = Style.TEXT_LIGHT.Opacity(0.7) } });
-        closeButton.Clicked += () =>
+        closeButton.Clicked += Close;
+
+        var titleBar = this.FindControl<Grid>("TitleBar") ?? throw new InvalidOperationException("TitleBar not found");
+        bool isMac = OperatingSystem.IsMacOS();
+        bool UseSystemTitle = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Linux);
+
+        if (isMac)
+        {
+            ExtendClientAreaChromeHints = Avalonia.Platform.ExtendClientAreaChromeHints.PreferSystemChrome;
+        }
+        else if (UseSystemTitle)
+        {
+            titleBar.Height = 0;
+        }
+        else
+        {
+            WindowControl.Children.Add(closeButton);
+        }
+
+        titleBar.PointerPressed += (_, e) =>
+        {
+            if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+            {
+                if (e.Source is Visual v && v.FindAncestorOfType<GUI.Components.Button>() != null)
+                    return;
+                BeginMoveDrag(e);
+            }
+        };
+
+        this.Closing += (_, _) =>
         {
             SaveExtensionSettings();
             Settings.Save(PathManager.SettingsFilePath);
             s.DisposeAll();
-            Close();
         };
-
-        WindowControl.Children.Add(closeButton);
-
-        var titleBar = this.FindControl<Grid>("TitleBar") ?? throw new InvalidOperationException("TitleBar not found");
-        bool UseSystemTitle = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Linux);
-        if (UseSystemTitle)
-        {
-            titleBar.Height = 0;
-        }
 
         // Resolve named controls
         mSidebarBorder = this.FindControl<Border>("SidebarBorder") ?? throw new InvalidOperationException("SidebarBorder not found");

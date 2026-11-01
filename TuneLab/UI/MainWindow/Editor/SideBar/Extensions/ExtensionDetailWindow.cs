@@ -80,7 +80,9 @@ internal sealed class ExtensionDetailWindow : Window
     public ExtensionDetailWindow(ExtensionDetailInfo info)
     {
         mPackageId = info.PackageId;
-        ExtendClientAreaChromeHints = Avalonia.Platform.ExtendClientAreaChromeHints.NoChrome;
+        ExtendClientAreaChromeHints = OperatingSystem.IsMacOS()
+            ? Avalonia.Platform.ExtendClientAreaChromeHints.PreferSystemChrome
+            : Avalonia.Platform.ExtendClientAreaChromeHints.NoChrome;
         ExtendClientAreaToDecorationsHint = true;
         ExtendClientAreaTitleBarHeightHint = 40;
         CanResize = true;
@@ -136,7 +138,8 @@ internal sealed class ExtensionDetailWindow : Window
             });
         close.HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right;
         close.Clicked += Close;
-        bar.Children.Add(close);
+        if (!OperatingSystem.IsMacOS())
+            bar.Children.Add(close);
 
         // 顶栏空白处拖动移窗。内置 Button（Component）刻意【不吞】PointerPressed，故这里必须按事件源过滤：
         // 只有落在顶栏自身上才拖窗——否则按下关闭键就会开始拖动、指针被拖动接管、Clicked 永远不触发。

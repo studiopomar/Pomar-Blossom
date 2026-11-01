@@ -1,8 +1,9 @@
-﻿using Avalonia;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 using System;
 using System.IO;
 using System.Linq;
@@ -76,14 +77,49 @@ public partial class MainWindow : Window
             .AddContent(new() { Item = new IconItem() { Icon = Assets.WindowClose }, ColorSet = new() { Color = Style.TEXT_LIGHT.Opacity(0.7) } });
         closeButton.Clicked += () => Close();
 
-        bool UseSystemTitle = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Linux); //Is Only Linux have double title case X11?
-	    if(!UseSystemTitle){
-        	WindowControl.Children.Add(binimizeButton);
-        	WindowControl.Children.Add(maximizeButton);
-        	WindowControl.Children.Add(closeButton);
-		    TitleBar.Children.Add(TitleLabel);
-	    }
- 
+        bool isMac = OperatingSystem.IsMacOS();
+        bool isLinux = OperatingSystem.IsLinux();
+
+        if (isMac)
+        {
+            ExtendClientAreaChromeHints = Avalonia.Platform.ExtendClientAreaChromeHints.PreferSystemChrome;
+            MenuBar.Margin = new Thickness(78, 0, 0, 0);
+            TitleLabel.FontSize = 13;
+            TitleLabel.FontWeight = FontWeight.Medium;
+            TitleBar.Children.Add(TitleLabel);
+        }
+        else if (isLinux)
+        {
+            // Linux WM provides window frame decorations
+        }
+        else
+        {
+            WindowControl.Children.Add(binimizeButton);
+            WindowControl.Children.Add(maximizeButton);
+            WindowControl.Children.Add(closeButton);
+            TitleBar.Children.Add(TitleLabel);
+        }
+
+        CustomTitleBar.PointerPressed += (s, e) =>
+        {
+            if (e.GetCurrentPoint(CustomTitleBar).Properties.IsLeftButtonPressed)
+            {
+                if (e.Source is Visual visual && visual.FindAncestorOfType<MenuItem>() != null)
+                    return;
+                if (e.Source is Visual v2 && v2.FindAncestorOfType<Button>() != null)
+                    return;
+
+                if (e.ClickCount == 2)
+                {
+                    WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+                }
+                else
+                {
+                    BeginMoveDrag(e);
+                }
+            }
+        };
+
         this.AttachWindowStateHandler();
 
         mEditor = new Editor();
@@ -100,6 +136,7 @@ public partial class MainWindow : Window
         MinHeight = mEditor.MinHeight;
 
         UpdateTitle();
+        SetupNativeMenu();
 
         PositionChanged += (_, _) => SaveCurrentWindowBounds();
         this.Closing += MainWindow_Closing;
@@ -380,6 +417,169 @@ public partial class MainWindow : Window
             this.WindowState = this.WindowState == WindowState.FullScreen
                 ? WindowState.Normal
                 : WindowState.FullScreen;
+    }
+
+    void SetupNativeMenu()
+    {
+        if (!OperatingSystem.IsMacOS())
+            return;
+
+        var nativeMenu = new NativeMenu();
+
+        // 1. App menu ("TuneLab")
+        var appMenu = new NativeMenu();
+        
+        var aboutItem = new NativeMenuItem("About TuneLab".Tr(TC.Dialog));
+        aboutItem.Click += (_, _) => ActionRegistry.Execute("app.about");
+        appMenu.Items.Add(aboutItem);
+
+        var updatesItem = new NativeMenuItem("Check for Updates...".Tr(TC.Dialog));
+        updatesItem.Click += (_, _) => ActionRegistry.Execute("app.checkUpdates");
+        appMenu.Items.Add(updatesItem);
+
+        appMenu.Items.Add(new NativeMenuItemSeparator());
+
+        var settingsItem = new NativeMenuItem("Settings...".Tr(TC.Menu))
+        {
+            Gesture = new KeyGesture(Key.OemComma, KeyModifiers.Meta)
+        };
+        settingsItem.Click += (_, _) => ActionRegistry.Execute("app.settings");
+        appMenu.Items.Add(settingsItem);
+
+        appMenu.Items.Add(new NativeMenuItemSeparator());
+
+        var quitItem = new NativeMenuItem("Quit TuneLab".Tr(TC.Menu))
+        {
+            Gesture = new KeyGesture(Key.Q, KeyModifiers.Meta)
+        };
+        quitItem.Click += (_, _) => Close();
+        appMenu.Items.Add(quitItem);
+
+        var appMenuItem = new NativeMenuItem("TuneLab") { Menu = appMenu };
+        nativeMenu.Items.Add(appMenuItem);
+
+        // 2. File menu
+        var fileMenu = new NativeMenu();
+
+        var newItem = new NativeMenuItem("New".Tr(TC.Menu))
+        {
+            Gesture = new KeyGesture(Key.N, KeyModifiers.Meta)
+        };
+        newItem.Click += (_, _) => ActionRegistry.Execute("file.new");
+        fileMenu.Items.Add(newItem);
+
+        var openItem = new NativeMenuItem("Open".Tr(TC.Menu))
+        {
+            Gesture = new KeyGesture(Key.O, KeyModifiers.Meta)
+        };
+        openItem.Click += (_, _) => ActionRegistry.Execute("file.open");
+        fileMenu.Items.Add(openItem);
+
+        fileMenu.Items.Add(new NativeMenuItemSeparator());
+
+        var saveItem = new NativeMenuItem("Save".Tr(TC.Menu))
+        {
+            Gesture = new KeyGesture(Key.S, KeyModifiers.Meta)
+        };
+        saveItem.Click += (_, _) => ActionRegistry.Execute("file.save");
+        fileMenu.Items.Add(saveItem);
+
+        var saveAsItem = new NativeMenuItem("Save As".Tr(TC.Menu))
+        {
+            Gesture = new KeyGesture(Key.S, KeyModifiers.Meta | KeyModifiers.Shift)
+        };
+        saveAsItem.Click += (_, _) => ActionRegistry.Execute("file.saveAs");
+        fileMenu.Items.Add(saveAsItem);
+
+        fileMenu.Items.Add(new NativeMenuItemSeparator());
+
+        var addTrackItem = new NativeMenuItem("Add Track".Tr(TC.Menu));
+        addTrackItem.Click += (_, _) => mEditor.AddTrack();
+        fileMenu.Items.Add(addTrackItem);
+
+        var importAudioItem = new NativeMenuItem("Import Audio".Tr(TC.Menu));
+        importAudioItem.Click += (_, _) => mEditor.ImportAudio();
+        fileMenu.Items.Add(importAudioItem);
+
+        var importTrackItem = new NativeMenuItem("Import Track".Tr(TC.Menu));
+        importTrackItem.Click += (_, _) => mEditor.ImportTrack();
+        fileMenu.Items.Add(importTrackItem);
+
+        fileMenu.Items.Add(new NativeMenuItemSeparator());
+
+        var exportMixItem = new NativeMenuItem("Export Mix".Tr(TC.Menu));
+        exportMixItem.Click += (_, _) => mEditor.ExportMix();
+        fileMenu.Items.Add(exportMixItem);
+
+        var fileMenuItem = new NativeMenuItem("File".Tr(TC.Menu)) { Menu = fileMenu };
+        nativeMenu.Items.Add(fileMenuItem);
+
+        // 3. Edit menu
+        var editMenu = new NativeMenu();
+
+        var undoItem = new NativeMenuItem("Undo".Tr(TC.Menu))
+        {
+            Gesture = new KeyGesture(Key.Z, KeyModifiers.Meta)
+        };
+        undoItem.Click += (_, _) => ActionRegistry.Execute("edit.undo");
+        editMenu.Items.Add(undoItem);
+
+        var redoItem = new NativeMenuItem("Redo".Tr(TC.Menu))
+        {
+            Gesture = new KeyGesture(Key.Z, KeyModifiers.Meta | KeyModifiers.Shift)
+        };
+        redoItem.Click += (_, _) => ActionRegistry.Execute("edit.redo");
+        editMenu.Items.Add(redoItem);
+
+        var editMenuItem = new NativeMenuItem("Edit".Tr(TC.Menu)) { Menu = editMenu };
+        nativeMenu.Items.Add(editMenuItem);
+
+        // 4. Window menu
+        var windowMenu = new NativeMenu();
+
+        var minItem = new NativeMenuItem("Minimize".Tr(TC.Menu))
+        {
+            Gesture = new KeyGesture(Key.M, KeyModifiers.Meta)
+        };
+        minItem.Click += (_, _) => WindowState = WindowState.Minimized;
+        windowMenu.Items.Add(minItem);
+
+        var zoomItem = new NativeMenuItem("Zoom".Tr(TC.Menu));
+        zoomItem.Click += (_, _) => WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+        windowMenu.Items.Add(zoomItem);
+
+        var fullScreenItem = new NativeMenuItem("Full Screen".Tr(TC.Menu))
+        {
+            Gesture = new KeyGesture(Key.F, KeyModifiers.Meta | KeyModifiers.Control)
+        };
+        fullScreenItem.Click += (_, _) => OnMenuFullScreen(this, new RoutedEventArgs());
+        windowMenu.Items.Add(fullScreenItem);
+
+        var windowMenuItem = new NativeMenuItem("Window".Tr(TC.Menu)) { Menu = windowMenu };
+        nativeMenu.Items.Add(windowMenuItem);
+
+        // 5. Help menu
+        var helpMenu = new NativeMenu();
+
+        var manualItem = new NativeMenuItem("User Manual".Tr(TC.Dialog))
+        {
+            Gesture = new KeyGesture(Key.F1)
+        };
+        manualItem.Click += (_, _) => ActionRegistry.Execute("app.manual");
+        helpMenu.Items.Add(manualItem);
+
+        var folderItem = new NativeMenuItem("Open TuneLab Folder".Tr(TC.Dialog));
+        folderItem.Click += (_, _) => ActionRegistry.Execute("app.openDataFolder");
+        helpMenu.Items.Add(folderItem);
+
+        var logItem = new NativeMenuItem("Open Log".Tr(TC.Dialog));
+        logItem.Click += (_, _) => ActionRegistry.Execute("app.openLog");
+        helpMenu.Items.Add(logItem);
+
+        var helpMenuItem = new NativeMenuItem("Help".Tr(TC.Menu)) { Menu = helpMenu };
+        nativeMenu.Items.Add(helpMenuItem);
+
+        NativeMenu.SetMenu(this, nativeMenu);
     }
     
     readonly Editor mEditor;

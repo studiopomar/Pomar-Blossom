@@ -59,7 +59,9 @@ internal sealed class ManualWindow : Window
 
     ManualWindow()
     {
-        ExtendClientAreaChromeHints = Avalonia.Platform.ExtendClientAreaChromeHints.NoChrome;
+        ExtendClientAreaChromeHints = OperatingSystem.IsMacOS()
+            ? Avalonia.Platform.ExtendClientAreaChromeHints.PreferSystemChrome
+            : Avalonia.Platform.ExtendClientAreaChromeHints.NoChrome;
         ExtendClientAreaToDecorationsHint = true;
         ExtendClientAreaTitleBarHeightHint = 40;
         CanResize = true;
@@ -121,7 +123,8 @@ internal sealed class ManualWindow : Window
             });
         close.HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right;
         close.Clicked += Close;
-        bar.Children.Add(close);
+        if (!OperatingSystem.IsMacOS())
+            bar.Children.Add(close);
 
 
         bar.PointerPressed += (_, e) =>
