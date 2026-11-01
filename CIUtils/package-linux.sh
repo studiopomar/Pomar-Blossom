@@ -119,6 +119,9 @@ if command -v rpmbuild &>/dev/null; then
     RPM_VER="${VERSION//-/_}"
 
     cat << EOF > "$RPM_ROOT/SPECS/tunelab.spec"
+%define _build_id_links none
+%global __os_install_post %{nil}
+%define debug_package %{nil}
 Name:           tunelab
 Version:        ${RPM_VER}
 Release:        1%{?dist}
